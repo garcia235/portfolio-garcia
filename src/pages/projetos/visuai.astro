@@ -1,0 +1,194 @@
+---
+import CaseStudy from '../../layouts/CaseStudy.astro';
+import Lineage from '../../components/Lineage.astro';
+import { url } from '../../data/site';
+---
+
+<CaseStudy
+  slug="visuai"
+  title="visuAI — estudo de caso · Arthur Garcia"
+  description="Como arquitetei o visuAI: inteligência comercial multi-tenant para incorporadoras que usam o CV CRM, com isolamento em três camadas e cada número rastreável até a consulta que o produziu."
+  period="2025 — hoje, em produção"
+  team="3 sócios de tecnologia na AI8; arquitetura e backend comigo"
+>
+  <div slot="media" class="player">
+    <video controls preload="none" playsinline poster={url('media/visuai-capa.webp')}>
+      <source src={url('media/visuai-paineis.mp4')} type="video/mp4" />
+    </video>
+  </div>
+
+  <section class="block">
+    <h2><span>01</span>Visão geral</h2>
+    <div class="prose">
+      <p class="lead">
+        Incorporadoras decidem por planilha porque não confiam no relatório. O visuAI lê o CV CRM
+        delas e entrega um número que dá para defender numa reunião.
+      </p>
+      <p>
+        O produto monta o percurso comercial inteiro, do lead ao repasse, numa esteira só: cada
+        etapa com o número, a conversão para a próxima e o que falta de dado. Em cima disso, painéis
+        que cada pessoa arranja do seu jeito, a partir de modelos prontos para diretoria, comercial,
+        marketing, estoque e financeiro.
+      </p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>02</span>O desafio</h2>
+    <div class="prose">
+      <p>
+        O concorrente não é outro software. É o relatório que o cliente já tem, que mostra
+        <strong>"(Em branco)"</strong> em dois indicadores e não fecha com a planilha do controller.
+        Construir mais um dashboard não resolve nada.
+      </p>
+      <ul>
+        <li>O CV CRM é a fonte. O visuAI <strong>nunca escreve</strong> de volta nele.</li>
+        <li>A API do CV pagina devagar: dezenas de milhares de leads por cliente, a segundos por página.</li>
+        <li>Cada incorporadora define "venda", "VGV" e "competência" de um jeito, e a definição muda.</li>
+        <li>Os dados são de clientes concorrentes entre si, no mesmo banco.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>03</span>Meu papel</h2>
+    <div class="prose">
+      <p>
+        Sou um dos três sócios de tecnologia da AI8 e respondo pela arquitetura. No visuAI fiz o
+        produto de ponta a ponta: modelo de dados, pipeline de ingestão, motor de indicadores,
+        autenticação, o contrato entre backend e front, CI e deploy. Também participei da
+        <strong>conciliação com o controller</strong> de um cliente, a etapa que decidia se o
+        resto valia a pena.
+      </p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>04</span>Rastreabilidade</h2>
+    <div class="prose">
+      <h3>Clique no número.</h3>
+      <p>
+        É a ideia central do produto, então ela está aqui para você mexer. Todo indicador desce até
+        a consulta que o produziu e até o registro que veio do CV. Os números abaixo são da empresa
+        de demonstração, com dado sintético.
+      </p>
+      <Lineage />
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>05</span>Decisões-chave</h2>
+    <div class="decisions">
+      <div class="decision">
+        <h3>Isolamento em três camadas, cada uma sozinha suficiente</h3>
+        <p>
+          Filtro do Hibernate na sessão, repositório que exige o tenant e Row-Level Security com
+          <code>FORCE</code> no Postgres. O RLS é a rede de segurança, não o substituto do filtro:
+          se alguém esquecer o filtro, o banco ainda recusa.
+        </p>
+        <p class="why"><b>Medido em produção:</b> 42 de 43 tabelas com RLS forçado. A exceção é declarada: a fila de sincronização é entre empresas por construção.</p>
+      </div>
+      <div class="decision">
+        <h3>Ingestão em camadas: <code>raw</code> → <code>core</code></h3>
+        <p>
+          O que vem da API do CV entra intacto em <code>raw</code>, e só depois é promovido para o
+          modelo de domínio em <code>core</code>. Unidades guardam histórico em SCD-2, então dá para
+          responder como o estoque estava em qualquer data. A fila usa <code>SKIP LOCKED</code>
+          num worker separado da API.
+        </p>
+        <p class="why"><b>Por quê:</b> quando um número não bate, dá para reprocessar sem chamar o CV de novo, e provar de onde veio cada linha.</p>
+      </div>
+      <div class="decision">
+        <h3>A definição do número é do cliente, escrita e versionada</h3>
+        <p>
+          Na conciliação, o controller fechou três definições: a competência da venda é a data da
+          venda, o VGV oficial é o valor de tabela e o fechamento inclui unidades de empreendimentos
+          não lançados. Cada uma virou versão, então janeiro fechado em janeiro continua defensável
+          em fevereiro.
+        </p>
+        <p class="why"><b>Por quê:</b> sem isso, um ajuste de regra reescreveria o passado em silêncio.</p>
+      </div>
+      <div class="decision">
+        <h3>Login sem senha, e sem revelar quem é cliente</h3>
+        <p>
+          E-mail, código de seis dígitos e seletor de empresa. A lista de empresas só existe depois
+          do código verificado, e o cadastro público responde <code>202</code> com corpo vazio
+          sempre, exista ou não o CNPJ.
+        </p>
+        <p class="why"><b>Por quê:</b> o site não pode virar um verificador de "esta incorporadora usa visuAI".</p>
+      </div>
+      <div class="decision">
+        <h3>Erro é código; o contrato é conferido na CI</h3>
+        <p>
+          A API devolve só <code>{'{ code, traceId }'}</code>. O OpenAPI é gerado do código no
+          backend e copiado para o front, e o build do front falha se o contrato local estiver
+          defasado ou se um código de erro não tiver tradução.
+        </p>
+        <p class="why"><b>Por quê:</b> dois repositórios divergem em silêncio. A trava torna a divergência um erro de compilação.</p>
+      </div>
+      <div class="decision">
+        <h3>Read models por rollup incremental, nunca materialized view</h3>
+        <p>
+          Os indicadores leem tabelas de rollup atualizadas a cada sincronização, em vez de
+          <code>MATERIALIZED VIEW</code> com refresh total. O núcleo de cálculo é Java puro, sem
+          Spring e sem banco, e testado assim.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>06</span>Por dentro</h2>
+    <div class="gallery">
+      <figure>
+        <img src={url('media/visuai-funil.webp')} alt="Visão Geral do visuAI com o funil comercial e a conversão entre as etapas" loading="lazy" width="1600" height="900" />
+        <figcaption>O funil comercial, com a conversão entre as etapas.</figcaption>
+      </figure>
+      <figure>
+        <img src={url('media/visuai-esteira.webp')} alt="Esteira do visuAI com as etapas do lead ao repasse e a ressalva de dado na etapa Leads" loading="lazy" width="1600" height="900" />
+        <figcaption>A esteira: cada etapa com o número e o que falta de dado.</figcaption>
+      </figure>
+      <figure>
+        <img src={url('media/visuai-modelo.webp')} alt="Painel criado a partir do modelo Diretoria, em modo de edição" loading="lazy" width="1600" height="900" />
+        <figcaption>Painel criado a partir de um modelo, já em edição.</figcaption>
+      </figure>
+      <figure>
+        <img src={url('media/visuai-construtor.webp')} alt="Construtor de bloco com prévia ao vivo do indicador" loading="lazy" width="1600" height="900" />
+        <figcaption>O construtor de bloco, com a prévia ao vivo.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>07</span>Resultado</h2>
+    <div class="prose">
+      <p>
+        Em produção, com backend, worker e front como serviços separados e CI verde nos dois
+        repositórios. O pipeline roda contra a base real do CV de clientes, e cada número da tela
+        tem a consulta que o produziu.
+      </p>
+      <div class="numbers">
+        <div><strong>~730</strong><span>classes Java de produção</span></div>
+        <div><strong>~320</strong><span>arquivos de teste no backend</span></div>
+        <div><strong>80</strong><span>migrações Flyway</span></div>
+        <div><strong>19</strong><span>abas na Visão Geral, do lead ao pós-venda</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>08</span>Aprendizados</h2>
+    <div class="prose">
+      <p>
+        A parte difícil não foi técnica. Foi descobrir que "venda" significa coisas diferentes
+        para o comercial e para o controller, e que um número só vale alguma coisa quando os dois
+        assinam embaixo. Hoje começo qualquer indicador pela pergunta "quem vai defender este número,
+        e contra quem?".
+      </p>
+      <p>
+        Se começasse de novo, colocaria a conciliação com o cliente antes de qualquer tela. Ela é
+        o portão: o resto só vale a pena se o número fechar.
+      </p>
+    </div>
+  </section>
+</CaseStudy>

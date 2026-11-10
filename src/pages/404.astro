@@ -1,0 +1,20 @@
+---
+import Base from '../layouts/Base.astro';
+import { url } from '../data/site';
+---
+
+<Base title="Página não encontrada · Arthur Garcia" description="Esta página não existe.">
+  <section class="nf wrap">
+    <p class="kicker">404</p>
+    <h1>Essa rota não tem integração.</h1>
+    <p>O endereço não existe ou mudou de lugar.</p>
+    <a class="btn primary" href={url('')}>Voltar para o início <span class="arrow" aria-hidden="true">→</span></a>
+  </section>
+</Base>
+
+<style>
+  .nf { padding: clamp(80px, 14vw, 180px) var(--gutter); display: grid; gap: 18px; }
+  h1 { font-size: clamp(40px, 7vw, 80px); letter-spacing: -0.04em; }
+  p:not(.kicker) { color: var(--ink-2); font-size: 18px; }
+  .btn { width: fit-content; }
+</style>

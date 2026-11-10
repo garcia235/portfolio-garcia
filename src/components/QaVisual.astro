@@ -1,0 +1,83 @@
+---
+// Visual do caso QuintoAndar: três fontes de trabalho disputando um orçamento de requisições.
+interface Props { compact?: boolean }
+const { compact = false } = Astro.props;
+const lanes = [
+  { y: 70, label: 'Polling de tickets', meta: 'a cada 5 min' },
+  { y: 150, label: 'Download de anexos', meta: 'até 4 por rodada' },
+  { y: 230, label: 'Respostas do analista', meta: 'pública · privada' },
+];
+---
+
+<figure class:list={['qa', { compact }]}>
+  <svg viewBox="0 0 640 300" role="img" aria-labelledby="qa-title">
+    <title id="qa-title">Três tipos de trabalho passam por um coordenador que respeita o limite de cerca de 10 requisições por minuto da API do Reclame Aqui</title>
+    <defs>
+      <pattern id="qa-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+        <path d="M20 0H0V20" fill="none" stroke="currentColor" stroke-opacity=".06" />
+      </pattern>
+    </defs>
+    <rect width="640" height="300" fill="url(#qa-grid)" />
+
+    {lanes.map((l, i) => (
+      <g class="lane">
+        <text x="20" y={l.y - 8} class="lbl">{l.label}</text>
+        <text x="20" y={l.y + 10} class="meta">{l.meta}</text>
+        <path d={`M180 ${l.y} C 250 ${l.y}, 250 150, 320 150`} class="track" />
+        <circle r="4" class="pk">
+          <animateMotion dur="2.4s" begin={`-${i * 0.8}s`} repeatCount="indefinite" path={`M180 ${l.y} C 250 ${l.y}, 250 150, 320 150`} />
+        </circle>
+      </g>
+    ))}
+
+    <g class="gate">
+      <rect x="320" y="104" width="130" height="92" rx="12" />
+      <text x="385" y="132" text-anchor="middle" class="gate-t">Coordenador</text>
+      <text x="385" y="150" text-anchor="middle" class="meta">orçamento por minuto</text>
+      <g class="meter">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <rect x={333 + i * 10.5} y="164" width="8" height="16" rx="2" style={`--i:${i}`} />
+        ))}
+      </g>
+    </g>
+
+    <path d="M450 150 H 520" class="track strong" />
+    <circle r="4" class="pk out">
+      <animateMotion dur="1.2s" repeatCount="indefinite" path="M450 150 H 520" />
+    </circle>
+
+    <g class="api">
+      <rect x="520" y="118" width="104" height="64" rx="12" />
+      <text x="572" y="146" text-anchor="middle" class="gate-t">HugMe</text>
+      <text x="572" y="163" text-anchor="middle" class="meta">~10 req/min</text>
+    </g>
+  </svg>
+</figure>
+
+<style>
+  .qa {
+    margin: 0; width: 100%; height: 100%;
+    display: grid; place-items: center;
+    background:
+      radial-gradient(120% 90% at 80% 10%, color-mix(in srgb, var(--qa) 22%, transparent), transparent 60%),
+      var(--bg-2);
+    color: var(--ink);
+    padding: clamp(12px, 3vw, 28px);
+  }
+  svg { width: 100%; max-width: 760px; height: auto; overflow: visible; }
+  .lbl { font: 600 13px var(--font-sans); fill: var(--ink); }
+  .meta { font: 400 10px var(--font-mono); fill: var(--muted); }
+  .track { fill: none; stroke: var(--line-2); stroke-width: 1.4; }
+  .track.strong { stroke: var(--qa); stroke-width: 2; }
+  .pk { fill: var(--qa); }
+  .pk.out { fill: var(--ink); }
+  .gate rect:first-child, .api rect { fill: var(--surface); stroke: var(--qa); stroke-width: 1.4; }
+  .api rect { stroke: var(--line-2); }
+  .gate-t { font: 700 13px var(--font-sans); fill: var(--ink); }
+  .meter rect { fill: var(--qa); opacity: .25; animation: fill 4s steps(1) infinite; animation-delay: calc(var(--i) * .2s); }
+  @keyframes fill { 0%, 100% { opacity: .25 } 40%, 70% { opacity: 1 } }
+  @media (prefers-reduced-motion: reduce) {
+    .meter rect { animation: none; opacity: .7; }
+    .pk { display: none; }
+  }
+</style>

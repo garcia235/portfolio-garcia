@@ -1,0 +1,102 @@
+---
+// Um indicador que desce até a origem. Dados do tenant de demonstração (sintéticos).
+const layers = [
+  {
+    tag: 'definição · v3',
+    title: 'O que conta como venda',
+    body: 'Conversão = vendas no período ÷ leads no período. Competência da venda é a data da venda, fechada com o controller e versionada.',
+  },
+  {
+    tag: 'consulta',
+    title: 'A consulta que produziu o número',
+    code: `select count(*) filter (where etapa = 'VENDA')::numeric
+     / nullif(count(*) filter (where etapa = 'LEAD'), 0)
+  from core.evento_funil
+ where tenant_id   = :empresa
+   and competencia between :inicio and :fim;`,
+  },
+  {
+    tag: 'core',
+    title: '348 leads · 9 vendas',
+    body: 'Modelo de domínio, promovido do raw. Cada lead com o histórico de situações; unidades com SCD-2.',
+  },
+  {
+    tag: 'raw',
+    title: 'Como chegou do CV CRM',
+    body: 'GET /leads e GET /vendas, gravados intactos, com a página, o horário da coleta e a execução de sincronização.',
+  },
+];
+---
+
+<div class="lin" data-lineage>
+  <div class="kpi">
+    <div class="kpi-top">
+      <span class="mono kpi-k">Esteira · Lead → Venda</span>
+      <span class="mono kpi-p">01/09 a 30/09/2026</span>
+    </div>
+    <div class="kpi-row">
+      <strong class="kpi-v">2,59%</strong>
+      <button type="button" class="btn small" aria-expanded="false" aria-controls="lin-layers" data-lineage-toggle>
+        <span data-label>De onde vem esse número?</span> <span aria-hidden="true" class="chev">↓</span>
+      </button>
+    </div>
+    <p class="kpi-d">9 vendas de 348 leads no período.</p>
+  </div>
+
+  <ol class="layers" id="lin-layers" hidden>
+    {layers.map((l, i) => (
+      <li style={`--i:${i}`}>
+        <span class="mono tag">{l.tag}</span>
+        <strong>{l.title}</strong>
+        {l.body && <p>{l.body}</p>}
+        {l.code && <pre class="code"><code>{l.code}</code></pre>}
+      </li>
+    ))}
+  </ol>
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-lineage]').forEach((root) => {
+    const btn = root.querySelector<HTMLButtonElement>('[data-lineage-toggle]')!;
+    const list = root.querySelector<HTMLElement>('.layers')!;
+    const label = btn.querySelector<HTMLElement>('[data-label]')!;
+    btn.addEventListener('click', () => {
+      const open = btn.getAttribute('aria-expanded') !== 'true';
+      btn.setAttribute('aria-expanded', String(open));
+      list.hidden = !open;
+      root.classList.toggle('open', open);
+      label.textContent = open ? 'Recolher' : 'De onde vem esse número?';
+    });
+  });
+</script>
+
+<style>
+  .lin { margin-top: 8px; }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px;
+    display: grid; gap: 6px; position: relative; z-index: 1;
+  }
+  .kpi-top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .kpi-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .kpi-v { font-size: clamp(44px, 6vw, 64px); letter-spacing: -0.04em; color: var(--ink); line-height: 1; }
+  .kpi-d { font-size: 14px !important; color: var(--muted); }
+  .btn.small { padding: 9px 16px; font-size: 14px; border-color: var(--c); color: var(--ink); }
+  .chev { transition: transform .3s var(--ease); }
+  .lin:global(.open) .chev { transform: rotate(180deg); }
+
+  .layers { list-style: none; margin: 0; padding: 0 0 0 26px; position: relative; display: grid; gap: 10px; }
+  .layers::before { content: ''; position: absolute; left: 12px; top: 0; bottom: 18px; width: 1px; background: linear-gradient(var(--c), var(--line-2)); }
+  .layers[hidden] { display: none; }
+  .layers li {
+    position: relative; margin-top: 10px; padding: 14px 16px; border-radius: 12px;
+    background: var(--bg-2); border: 1px solid var(--line); display: grid; gap: 4px;
+    animation: drop .45s var(--ease) both; animation-delay: calc(var(--i) * 120ms);
+  }
+  .layers li::before { content: ''; position: absolute; left: -18px; top: 22px; width: 12px; height: 1px; background: var(--line-2); }
+  .layers .tag { font-size: 11px; color: var(--c); text-transform: uppercase; letter-spacing: .1em; }
+  .layers strong { color: var(--ink); font-size: 16px; }
+  .layers p { font-size: 15px; color: var(--ink-2); }
+  .layers pre { margin-top: 6px; font-size: 12px; }
+  @keyframes drop { from { opacity: 0; transform: translateY(-8px); } }
+  @media (prefers-reduced-motion: reduce) { .layers li { animation: none; } }
+</style>

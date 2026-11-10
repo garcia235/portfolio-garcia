@@ -1,0 +1,199 @@
+---
+// Simulação de um minuto de integração com uma API de ~10 req/min.
+// Modelo simplificado para ilustrar a decisão, não o código de produção.
+---
+
+<div class="sim" data-sim>
+  <div class="sim-top">
+    <div class="seg" role="group" aria-label="Estratégia">
+      <button type="button" data-mode="naive" aria-pressed="true">Cada job por si</button>
+      <button type="button" data-mode="coord" aria-pressed="false">Com coordenador</button>
+    </div>
+    <button type="button" class="replay mono" data-replay>↻ rodar de novo</button>
+  </div>
+
+  <div class="chart">
+    <div class="rows">
+      <span>Respostas</span>
+      <span>Polling</span>
+      <span>Anexos</span>
+    </div>
+    <svg class="plot" viewBox="0 0 600 150" preserveAspectRatio="none" aria-hidden="true">
+      <g class="grid">
+        {Array.from({ length: 7 }).map((_, i) => <line x1={i * 100} x2={i * 100} y1="0" y2="150" />)}
+        <line x1="0" x2="600" y1="50" y2="50" />
+        <line x1="0" x2="600" y1="100" y2="100" />
+      </g>
+      <g class="marks"></g>
+      <line class="head" x1="0" x2="0" y1="0" y2="150" />
+    </svg>
+    <div class="axis mono"><span>0s</span><span>30s</span><span>60s</span></div>
+  </div>
+
+  <dl class="stats" aria-live="polite">
+    <div><dt data-s="sent">0</dt><dd>requisições aceitas</dd></div>
+    <div class="bad"><dt data-s="r429">0</dt><dd>respostas 429</dd></div>
+    <div><dt data-s="wait">0s</dt><dd>maior espera de uma resposta do analista</dd></div>
+    <div><dt data-s="left">0</dt><dd>anexos para a próxima rodada</dd></div>
+  </dl>
+
+  <p class="legend mono">
+    <span><i class="lg ok"></i>aceita</span>
+    <span><i class="lg no"></i>429</span>
+    <span>orçamento: ~10 req/min, já parcialmente usado</span>
+  </p>
+</div>
+
+<script>
+  type Kind = 'msg' | 'poll' | 'att';
+  type Job = { kind: Kind; ready: number; tries: number; createdAt: number; done?: boolean; failed?: boolean };
+  type Mark = { t: number; kind: Kind; ok: boolean };
+
+  const ROW: Record<Kind, number> = { msg: 25, poll: 75, att: 125 };
+  const PRIORITY: Record<Kind, number> = { msg: 0, poll: 1, att: 2 };
+
+  function simulate(mode: 'naive' | 'coord') {
+    let tokens = 3;
+    const refillEvery = 6; // 10 por minuto
+    const jobs: Job[] = [
+      ...[0, 0, 0].map((t) => ({ kind: 'poll' as Kind, ready: t, tries: 0, createdAt: t })),
+      ...Array.from({ length: 8 }, () => ({ kind: 'att' as Kind, ready: 1, tries: 0, createdAt: 1 })),
+      ...[13, 31, 44].map((t) => ({ kind: 'msg' as Kind, ready: t, tries: 0, createdAt: t })),
+    ];
+    const marks: Mark[] = [];
+    let maxWait = 0;
+    let attThisRun = 0;
+
+    for (let t = 0; t < 60; t += 0.5) {
+      if (t > 0 && t % refillEvery === 0) tokens = Math.min(10, tokens + 1);
+      const ready = jobs.filter((j) => !j.done && !j.failed && j.ready <= t);
+
+      if (mode === 'naive') {
+        // todo mundo chama na hora; quem toma 429 tenta de novo em 3s, até 8 vezes
+        for (const j of ready) {
+          j.tries++;
+          if (tokens >= 1) {
+            tokens--; j.done = true; marks.push({ t, kind: j.kind, ok: true });
+            if (j.kind === 'msg') maxWait = Math.max(maxWait, t - j.createdAt);
+          } else {
+            marks.push({ t, kind: j.kind, ok: false });
+            if (j.tries >= 8) j.failed = true; else j.ready = t + 3;
+          }
+        }
+      } else {
+        // o coordenador entrega cota por prioridade e guarda uma para a resposta do analista
+        ready.sort((a, b) => PRIORITY[a.kind] - PRIORITY[b.kind]);
+        for (const j of ready) {
+          if (tokens < 1) break;
+          if (j.kind === 'att' && (tokens <= 1 || attThisRun >= 4)) continue;
+          tokens--; j.done = true; marks.push({ t, kind: j.kind, ok: true });
+          if (j.kind === 'att') attThisRun++;
+          if (j.kind === 'msg') maxWait = Math.max(maxWait, t - j.createdAt);
+        }
+      }
+    }
+    for (const j of jobs) if (j.kind === 'msg' && !j.done) maxWait = Math.max(maxWait, 60 - j.createdAt);
+    const left = jobs.filter((j) => j.kind === 'att' && !j.done).length;
+    return { marks, maxWait, left, msgPending: jobs.some((j) => j.kind === 'msg' && !j.done) };
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-sim]').forEach((root) => {
+    const NS = 'http://www.w3.org/2000/svg';
+    const g = root.querySelector<SVGGElement>('.marks')!;
+    const head = root.querySelector<SVGLineElement>('.head')!;
+    const stat = (k: string) => root.querySelector<HTMLElement>(`[data-s="${k}"]`)!;
+    const modeBtns = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-mode]'));
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let mode: 'naive' | 'coord' = 'naive';
+    let raf = 0;
+    let started = false;
+
+    function run() {
+      cancelAnimationFrame(raf);
+      const r = simulate(mode);
+      g.replaceChildren();
+      const els = r.marks.map((m, i) => {
+        const x = (m.t / 60) * 600 + 4;
+        const y = ROW[m.kind] + ((i % 3) - 1) * 7;
+        let el: SVGElement;
+        if (m.ok) {
+          el = document.createElementNS(NS, 'circle');
+          el.setAttribute('cx', String(x)); el.setAttribute('cy', String(y)); el.setAttribute('r', '4');
+        } else {
+          el = document.createElementNS(NS, 'path');
+          el.setAttribute('d', `M${x - 3.5},${y - 3.5} L${x + 3.5},${y + 3.5} M${x + 3.5},${y - 3.5} L${x - 3.5},${y + 3.5}`);
+        }
+        el.setAttribute('class', `m ${m.ok ? 'ok' : 'no'} k-${m.kind}`);
+        el.style.opacity = '0';
+        g.appendChild(el);
+        return { el, m };
+      });
+
+      const total = reduce ? 0 : 5200;
+      const t0 = performance.now();
+      const frame = (now: number) => {
+        const p = total ? Math.min(1, (now - t0) / total) : 1;
+        const simT = p * 60;
+        head.setAttribute('x1', String(p * 600)); head.setAttribute('x2', String(p * 600));
+        let sent = 0, r429 = 0;
+        for (const { el, m } of els) {
+          if (m.t <= simT) { el.style.opacity = '1'; m.ok ? sent++ : r429++; }
+        }
+        stat('sent').textContent = String(sent);
+        stat('r429').textContent = String(r429);
+        if (p >= 1) {
+          stat('wait').textContent = r.msgPending ? '+60s' : `${Math.round(r.maxWait)}s`;
+          stat('left').textContent = String(r.left);
+          return;
+        }
+        stat('wait').textContent = '…';
+        stat('left').textContent = '…';
+        raf = requestAnimationFrame(frame);
+      };
+      raf = requestAnimationFrame(frame);
+    }
+
+    modeBtns.forEach((b) => b.addEventListener('click', () => {
+      mode = b.dataset.mode as 'naive' | 'coord';
+      modeBtns.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      root.dataset.mode = mode;
+      run();
+    }));
+    root.querySelector('[data-replay]')!.addEventListener('click', run);
+
+    new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && !started) { started = true; run(); }
+    }, { threshold: 0.4 }).observe(root);
+  });
+</script>
+
+<style>
+  .sim { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 18px; display: grid; gap: 16px; margin-top: 8px; }
+  .sim-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--bg-2); border: 1px solid var(--line); }
+  .seg button { font: 600 13px var(--font-sans); padding: 7px 14px; border-radius: 999px; border: 0; background: transparent; color: var(--ink-2); cursor: pointer; }
+  .seg button[aria-pressed='true'] { background: var(--c); color: #0c0d0f; }
+  .replay { font-size: 12px; background: none; border: 0; color: var(--muted); cursor: pointer; }
+  .replay:hover { color: var(--ink); }
+
+  .chart { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; }
+  .rows { display: grid; grid-template-rows: repeat(3, 1fr); font-size: 12px; color: var(--muted); align-items: center; height: 150px; }
+  .plot { width: 100%; height: 150px; overflow: visible; }
+  .grid line { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .head { stroke: var(--c); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .plot :global(.m) { transition: opacity .2s; vector-effect: non-scaling-stroke; }
+  .plot :global(.m.ok) { fill: var(--c); }
+  .plot :global(.m.no) { stroke: var(--bad); stroke-width: 2; fill: none; }
+  .axis { grid-column: 2; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0; }
+  .stats div { background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .stats dt { font-size: 26px; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .stats .bad dt { color: var(--bad); }
+  .stats dd { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.35; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+  .lg { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .lg.ok { background: var(--c); }
+  .lg.no { background: var(--bad); border-radius: 1px; }
+  @media (max-width: 640px) { .stats { grid-template-columns: 1fr 1fr; } }
+</style>

@@ -1,0 +1,197 @@
+---
+import Base from '../layouts/Base.astro';
+import SystemMap from '../components/SystemMap.astro';
+import ProjectFeature from '../components/ProjectFeature.astro';
+import Principles from '../components/Principles.astro';
+import { featured, otherWork, timeline, person } from '../data/site';
+
+const stack = [
+  { area: 'Arquitetura', items: ['DDD', 'Clean Architecture', 'SaaS multi-tenant', 'ADRs', 'OpenAPI', 'ArchUnit'] },
+  { area: 'Backend', items: ['Java 21', 'Spring Boot', 'Spring Security', 'JPA/Hibernate', 'Flyway', 'PostgreSQL', 'Testcontainers'] },
+  { area: 'Salesforce', items: ['Apex síncrono e assíncrono', 'LWC', 'Flows', 'Trigger Handler', 'Named Credentials'] },
+  { area: 'Integrações', items: ['REST', 'SOAP', 'Webhooks', 'CV CRM', 'Informakon', 'SAP', 'Sienge', 'Meta Cloud API'] },
+  { area: 'Frontend', items: ['React', 'TypeScript', 'Vite', 'Tailwind', 'TanStack Query'] },
+  { area: 'Infra', items: ['Docker', 'Railway', 'GitHub Actions', 'nginx', 'Jenkins'] },
+];
+---
+
+<Base
+  title="Arthur Garcia — Arquiteto de software e integrações"
+  description="Arquiteto de software e integrações em Java, Spring Boot e Salesforce. Sócio de tecnologia da AI8 (visuAI, Check Home), sócio da Polara Innovations e Salesforce Developer na Taak, na plataforma do QuintoAndar."
+>
+  <!-- HERO -------------------------------------------------------------->
+  <section class="hero">
+    <div class="wrap hero-in">
+      <div class="hero-text">
+        <p class="kicker">Arquiteto de software e integrações</p>
+        <h1>
+          Faço sistemas conversarem <em>e números fecharem.</em>
+        </h1>
+        <p class="lede">
+          Sou o <strong>Arthur Garcia</strong>. Desenho e coloco em produção plataformas SaaS
+          multi-tenant e integrações entre CRMs, ERPs e APIs que não foram feitas para se falar.
+          Em Java, Spring Boot e Salesforce, do modelo de domínio ao deploy.
+        </p>
+        <div class="hero-cta">
+          <a class="btn primary" href="#projetos">Ver projetos <span class="arrow" aria-hidden="true">↓</span></a>
+          <a class="btn" href={person.whatsapp} target="_blank" rel="noopener">Falar comigo</a>
+        </div>
+        <ul class="now" aria-label="Onde estou agora">
+          <li><span class="pulse" aria-hidden="true"></span><span>Sócio de tecnologia na <strong>AI8</strong> e sócio da <strong>Polara Innovations</strong></span></li>
+          <li><span class="pulse" aria-hidden="true"></span><span>Salesforce Developer na <strong>Taak</strong>, plataforma do <strong>QuintoAndar</strong></span></li>
+        </ul>
+      </div>
+
+      <div class="hero-map">
+        <SystemMap />
+      </div>
+    </div>
+  </section>
+
+  <!-- PROJETOS ---------------------------------------------------------->
+  <section class="section" id="projetos">
+    <div class="wrap">
+      <header class="section-head" data-reveal>
+        <span class="kicker">Projetos</span>
+        <h2>Trabalho real, com cliente real e dado real.</h2>
+        <p>
+          Dois produtos que construí do zero como sócio da AI8 e a integração que desenhei para o
+          atendimento do QuintoAndar. Cada um tem um estudo de caso com o problema, as decisões e
+          o que eu faria diferente.
+        </p>
+      </header>
+
+      {featured.map((p, i) => <ProjectFeature project={p} index={i} />)}
+    </div>
+  </section>
+
+  <!-- OUTROS ------------------------------------------------------------>
+  <section class="section">
+    <div class="wrap">
+      <header class="section-head" data-reveal>
+        <span class="kicker">Também construí</span>
+        <h2>Outras integrações e produtos.</h2>
+      </header>
+      <div class="others">
+        {otherWork.map((w) => (
+          <article class="card other" data-reveal>
+            <p class="mono other-org">{w.org}</p>
+            <h3>{w.href ? <a href={w.href} target="_blank" rel="noopener">{w.name} <span aria-hidden="true">↗</span></a> : w.name}</h3>
+            <p>{w.text}</p>
+            <ul class="tags">{w.tags.map((t) => <li>{t}</li>)}</ul>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- PRINCÍPIOS -------------------------------------------------------->
+  <section class="section" id="principios">
+    <div class="wrap">
+      <header class="section-head" data-reveal>
+        <span class="kicker">Como eu trabalho</span>
+        <h2>Decisões que se repetem de um projeto para o outro.</h2>
+        <p>
+          Gosto de entender o problema antes de escrever código. Estas são as escolhas que mais
+          voltam, e o porquê de cada uma.
+        </p>
+      </header>
+      <div data-reveal><Principles /></div>
+    </div>
+  </section>
+
+  <!-- TRAJETÓRIA -------------------------------------------------------->
+  <section class="section" id="trajetoria">
+    <div class="wrap traj">
+      <div>
+        <header class="section-head" data-reveal>
+          <span class="kicker">Trajetória</span>
+          <h2>Do técnico na ETEC à arquitetura de produto.</h2>
+        </header>
+        <ol class="timeline">
+          {timeline.map((s) => (
+            <li class:list={[{ now: s.now }]} data-reveal>
+              <p class="mono when">{s.when}</p>
+              <h3>{s.title} <span>· {s.where}</span></h3>
+              <p>{s.text}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <aside class="stack" data-reveal aria-labelledby="stack-t">
+        <h3 id="stack-t" class="kicker">Ferramentas do dia a dia</h3>
+        <dl>
+          {stack.map((s) => (
+            <div>
+              <dt>{s.area}</dt>
+              <dd><ul class="tags">{s.items.map((i) => <li>{i}</li>)}</ul></dd>
+            </div>
+          ))}
+        </dl>
+        <p class="certs">
+          Salesforce Platform Developer I em andamento · System Architect em preparação pelo
+          Architect Track da Taak · Inglês intermediário (B1).
+        </p>
+      </aside>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .hero { padding: clamp(48px, 8vw, 96px) 0 clamp(64px, 9vw, 112px); position: relative; overflow: hidden; }
+  .hero::before {
+    content: ''; position: absolute; inset: -20% -10% auto auto; width: 70vw; height: 70vw; max-width: 900px; max-height: 900px;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 14%, transparent), transparent);
+    pointer-events: none;
+  }
+  .hero-in { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: clamp(32px, 5vw, 72px); align-items: center; position: relative; }
+  .hero-text { display: grid; gap: 22px; }
+  h1 { font-size: clamp(42px, 5.6vw, 76px); letter-spacing: -0.045em; line-height: 1; font-weight: 800; text-wrap: balance; }
+  h1 em { font-style: normal; color: var(--accent); display: block; }
+  .lede { font-size: clamp(17px, 1.7vw, 20px); color: var(--ink-2); max-width: 560px; }
+  .lede strong { color: var(--ink); }
+  .hero-cta { display: flex; flex-wrap: wrap; gap: 10px; }
+  .now { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; font-size: 14px; color: var(--ink-2); }
+  .now li { display: flex; align-items: center; gap: 10px; }
+  .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: pulse 2.4s infinite; flex: none; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); } 70%, 100% { box-shadow: 0 0 0 8px transparent; } }
+  @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
+
+  @media (max-width: 960px) {
+    .hero-in { grid-template-columns: 1fr; }
+  }
+
+  .others { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .other { padding: 26px; display: grid; gap: 12px; align-content: start; transition: border-color .25s, transform .25s var(--ease); }
+  .other:hover { border-color: var(--line-2); transform: translateY(-2px); }
+  .other:first-child { grid-column: 1 / -1; }
+  .other h3 { font-size: 24px; }
+  .other h3 a { text-decoration: none; }
+  .other h3 a:hover { color: var(--accent); }
+  .other h3 a span { font-size: .7em; color: var(--muted); }
+  .other p { color: var(--ink-2); font-size: 15px; }
+  .other-org { font-size: 11px !important; color: var(--muted) !important; text-transform: uppercase; letter-spacing: .08em; }
+  @media (max-width: 720px) { .others { grid-template-columns: 1fr; } }
+
+  .traj { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: clamp(32px, 6vw, 80px); align-items: start; }
+  .timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+  .timeline::before { content: ''; position: absolute; left: 5px; top: 8px; bottom: 8px; width: 1px; background: var(--line-2); }
+  .timeline li { position: relative; padding: 0 0 30px 32px; display: grid; gap: 4px; }
+  .timeline li::before {
+    content: ''; position: absolute; left: 0; top: 6px; width: 11px; height: 11px; border-radius: 50%;
+    background: var(--bg); border: 1px solid var(--line-2);
+  }
+  .timeline li.now::before { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 18%, transparent); }
+  .when { font-size: 12px; color: var(--muted); }
+  .timeline h3 { font-size: 19px; letter-spacing: -0.01em; }
+  .timeline h3 span { color: var(--muted); font-weight: 500; }
+  .timeline p:not(.when) { color: var(--ink-2); font-size: 15px; }
+
+  .stack { position: sticky; top: 96px; padding: 26px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); display: grid; gap: 18px; }
+  .stack dl { margin: 0; display: grid; gap: 14px; }
+  .stack dt { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+  .stack dd { margin: 0; }
+  .certs { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+  @media (max-width: 900px) { .traj { grid-template-columns: 1fr; } .stack { position: static; } }
+</style>

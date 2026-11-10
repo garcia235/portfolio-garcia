@@ -1,0 +1,161 @@
+---
+// Decisões que se repetem nos projetos, cada uma com um trecho simplificado.
+const items = [
+  {
+    id: 'erro',
+    title: 'Erro é código, nunca mensagem',
+    where: 'visuAI · front e API',
+    text:
+      'A API devolve só { code, traceId }. Mensagem de erro vaza nome de tabela, stack e, pior, existência de dado. Toda frase que o usuário lê é escrita no front, e um código novo sem tradução quebra o build antes de chegar em produção.',
+    lang: 'TypeScript',
+    code: `<span class="c">// a API nunca manda texto; o front é dono de cada palavra</span>
+<span class="k">const</span> mensagens: <span class="t">Record</span>&lt;<span class="t">ErrorCode</span>, <span class="t">string</span>&gt; = {
+  MUITAS_TENTATIVAS: <span class="s">'Muitas tentativas. Espere um minuto.'</span>,
+  SESSAO_EXPIRADA:   <span class="s">'Sua sessão expirou. Entre de novo.'</span>,
+  <span class="c">// código novo no contrato sem linha aqui → o tsc falha</span>
+};
+
+<span class="c">// e na CI: o contrato local tem que bater com o do backend</span>
+<span class="c">// npm run contract:check &amp;&amp; tsc &amp;&amp; vitest &amp;&amp; vite build</span>`,
+  },
+  {
+    id: 'tenant',
+    title: 'Isolamento que não depende de lembrar',
+    where: 'visuAI · Check Home',
+    text:
+      'Em SaaS multi-tenant, o vazamento entre clientes não vem de um ataque, vem de uma consulta esquecida. Por isso são três camadas independentes: filtro do Hibernate, repositório e Row-Level Security no Postgres. Se as duas primeiras falharem, o banco recusa.',
+    lang: 'SQL',
+    code: `<span class="k">alter table</span> core.reserva <span class="k">enable</span> row level security;
+<span class="k">alter table</span> core.reserva <span class="k">force</span>  row level security;
+
+<span class="k">create policy</span> isolamento_por_empresa <span class="k">on</span> core.reserva
+  <span class="k">using</span> (tenant_id = current_setting(<span class="s">'app.tenant_id'</span>)::uuid);
+
+<span class="c">-- conferido em produção: 42 de 43 tabelas com FORCE.</span>
+<span class="c">-- a exceção é declarada: a fila de sync é entre empresas por construção.</span>`,
+  },
+  {
+    id: 'origem',
+    title: 'Todo número tem origem, ou diz por que não tem',
+    where: 'visuAI · indicadores',
+    text:
+      'O cliente já tem relatório. O que ele não tem é um número que possa defender numa reunião. Cada indicador carrega a definição versionada e a consulta que o produziu; e um cartão que não calcula diz o motivo, nunca "(Em branco)".',
+    lang: 'Java',
+    code: `<span class="k">sealed interface</span> <span class="t">Resultado</span> <span class="k">permits</span> <span class="t">Valor</span>, <span class="t">SemDado</span> {}
+
+<span class="k">record</span> <span class="t">Valor</span>(<span class="t">BigDecimal</span> numero,
+             <span class="t">DefinicaoVersionada</span> definicao,
+             <span class="t">Origem</span> consulta) <span class="k">implements</span> <span class="t">Resultado</span> {}
+
+<span class="k">record</span> <span class="t">SemDado</span>(<span class="t">Motivo</span> motivo,
+               <span class="t">String</span> quemPrecisaAgir) <span class="k">implements</span> <span class="t">Resultado</span> {}
+
+<span class="c">// a tela é obrigada a tratar os dois casos: o compilador garante</span>`,
+  },
+  {
+    id: 'limite',
+    title: 'Integração respeita o outro lado',
+    where: 'QuintoAndar · Reclame Aqui',
+    text:
+      'A API do Reclame Aqui aceita cerca de 10 requisições por minuto, e polling, anexos e respostas disputam o mesmo orçamento. Em vez de cada job tentar a sorte e tomar 429, um coordenador reserva a cota antes da chamada, prioriza e reagenda com backoff.',
+    lang: 'Apex',
+    code: `<span class="c">// antes de chamar a API, o job pede cota ao coordenador</span>
+<span class="t">Integer</span> cota = coordenador.reservar(<span class="t">TipoJob</span>.ANEXO, <span class="s">4</span>);
+
+<span class="k">if</span> (cota == <span class="s">0</span>) {
+  job.reagendarPara(backoff.proxima(job.tentativas));
+  <span class="k">return</span>;  <span class="c">// sem 429, sem retry cego</span>
+}
+
+<span class="c">// watermark + janela de sobreposição: nenhum ticket fica para trás</span>
+<span class="c">// lease com TTL: se a execução morrer, a próxima retoma</span>`,
+  },
+];
+---
+
+<div class="pr" data-tabs>
+  <div class="pr-list" role="tablist" aria-label="Princípios">
+    {items.map((it, i) => (
+      <button
+        type="button"
+        role="tab"
+        id={`tab-${it.id}`}
+        aria-controls={`panel-${it.id}`}
+        aria-selected={i === 0 ? 'true' : 'false'}
+        tabindex={i === 0 ? 0 : -1}
+      >
+        <span class="pr-n mono">0{i + 1}</span>
+        <span class="pr-t">{it.title}</span>
+        <span class="pr-w mono">{it.where}</span>
+      </button>
+    ))}
+  </div>
+
+  <div class="pr-panels">
+    {items.map((it, i) => (
+      <div role="tabpanel" id={`panel-${it.id}`} aria-labelledby={`tab-${it.id}`} hidden={i !== 0}>
+        <p class="pr-text">{it.text}</p>
+        <div class="pr-code">
+          <div class="pr-bar mono"><span>{it.lang}</span><span>trecho simplificado</span></div>
+          <pre class="code"><code set:html={it.code} /></pre>
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-tabs]').forEach((root) => {
+    const tabs = Array.from(root.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    const select = (tab: HTMLButtonElement, focus = false) => {
+      tabs.forEach((t) => {
+        const on = t === tab;
+        t.setAttribute('aria-selected', String(on));
+        t.tabIndex = on ? 0 : -1;
+        const panel = root.querySelector<HTMLElement>(`#${t.getAttribute('aria-controls')}`);
+        if (panel) panel.hidden = !on;
+      });
+      if (focus) tab.focus();
+    };
+    tabs.forEach((t, i) => {
+      t.addEventListener('click', () => select(t));
+      t.addEventListener('keydown', (e) => {
+        const dir = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0;
+        if (!dir) return;
+        e.preventDefault();
+        select(tabs[(i + dir + tabs.length) % tabs.length], true);
+      });
+    });
+  });
+</script>
+
+<style>
+  .pr { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: clamp(20px, 4vw, 48px); align-items: start; }
+  .pr-list { display: grid; gap: 8px; }
+  .pr-list button {
+    text-align: left; font: inherit; color: var(--ink-2); cursor: pointer;
+    display: grid; grid-template-columns: auto 1fr; column-gap: 14px; row-gap: 2px;
+    padding: 16px 18px; border-radius: 12px; border: 1px solid transparent; background: transparent;
+    transition: background .2s, border-color .2s, color .2s;
+  }
+  .pr-list button:hover { background: var(--bg-2); color: var(--ink); }
+  .pr-list button[aria-selected='true'] { background: var(--surface); border-color: var(--line); color: var(--ink); }
+  .pr-n { grid-row: span 2; font-size: 12px; color: var(--muted); padding-top: 4px; }
+  .pr-list button[aria-selected='true'] .pr-n { color: var(--accent); }
+  .pr-t { font-weight: 600; font-size: 17px; line-height: 1.3; }
+  .pr-w { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+  .pr-panels [role='tabpanel'] { display: grid; gap: 20px; animation: in .35s var(--ease); }
+  .pr-panels [role='tabpanel'][hidden] { display: none; }
+  @keyframes in { from { opacity: 0; transform: translateY(6px); } }
+  .pr-text { font-size: clamp(17px, 1.6vw, 19px); color: var(--ink); }
+  .pr-code { border-radius: 10px; overflow: hidden; }
+  .pr-bar {
+    display: flex; justify-content: space-between; font-size: 11px; color: var(--muted);
+    padding: 8px 14px; border: 1px solid var(--line); border-bottom: 0; border-radius: 8px 8px 0 0; background: var(--surface);
+  }
+  .pr-code pre { border-radius: 0 0 8px 8px; }
+
+  @media (max-width: 860px) { .pr { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) { .pr-panels [role='tabpanel'] { animation: none; } }
+</style>

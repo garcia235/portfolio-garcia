@@ -1,0 +1,167 @@
+---
+import CaseStudy from '../../layouts/CaseStudy.astro';
+import InspectionDemo from '../../components/InspectionDemo.astro';
+import { url } from '../../data/site';
+---
+
+<CaseStudy
+  slug="checkhome"
+  title="Check Home — estudo de caso · Arthur Garcia"
+  description="Como reescrevi o Check Home: de um checklist em PHP para uma plataforma multi-tenant de vistoria de entrega de imóveis, com modo offline, laudo em PDF e fila da engenharia com prazo."
+  period="2026 — hoje, em produção"
+  team="AI8; arquitetura e backend comigo"
+>
+  <div slot="media" class="player">
+    <video controls preload="none" playsinline poster={url('media/checkhome-capa.webp')}>
+      <source src={url('media/checkhome.mp4')} type="video/mp4" />
+    </video>
+  </div>
+
+  <section class="block">
+    <h2><span>01</span>Visão geral</h2>
+    <div class="prose">
+      <p class="lead">
+        A entrega das chaves é o momento em que o cliente da construtora olha o imóvel com lupa.
+        O Check Home transforma essa vistoria num processo com dono e prazo.
+      </p>
+      <p>
+        O vistoriador marca item por item no tablet, com foto e observação, e o cliente assina na
+        tela. O laudo em PDF sai na hora, com o papel timbrado da construtora. Cada item reprovado
+        vira uma pendência para a engenharia, com prazo em dias úteis, e a revistoria só é liberada
+        depois do conserto.
+      </p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>02</span>O desafio</h2>
+    <div class="prose">
+      <p>
+        O ponto de partida era um sistema em <strong>PHP e MySQL</strong> que atendia uma
+        construtora: formulários fixos por tipo de imóvel, PDF gerado no servidor e integração com
+        as reservas do CV CRM. Funcionava, mas não escalava para um segundo cliente.
+      </p>
+      <ul>
+        <li>Cada construtora tem os seus modelos de checklist, a sua marca e os seus usuários.</li>
+        <li>Vistoria acontece em obra, e obra muitas vezes <strong>não tem sinal</strong>.</li>
+        <li>O laudo é um documento: precisa sair igual hoje e daqui a um ano.</li>
+        <li>Imobiliárias parceiras precisam ver o andamento sem ver o resto da empresa.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>03</span>Meu papel</h2>
+    <div class="prose">
+      <p>
+        Desenhei a arquitetura da nova versão e construí a API em Spring Boot, o modelo
+        multi-tenant, os papéis, a integração com o CV CRM por empresa, o e-mail transacional e o
+        deploy. A versão nova é um monorepo com a API e a SPA em React, e roda como serviços
+        separados atrás de um nginx.
+      </p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>04</span>O fluxo</h2>
+    <div class="prose">
+      <h3>Reprove um item.</h3>
+      <p>
+        É a regra que mais importa para a construtora: nada de item reprovado esquecido. Teste
+        abaixo; o prazo é calculado a partir de hoje, pulando o fim de semana.
+      </p>
+      <InspectionDemo />
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>05</span>Decisões-chave</h2>
+    <div class="decisions">
+      <div class="decision">
+        <h3>Offline primeiro, no tablet</h3>
+        <p>
+          A vistoria é gravada localmente em IndexedDB e entra numa fila de sincronização, que
+          envia quando a rede volta. Cada vistoria tem um id local que é mapeado para o id do
+          servidor, e as atualizações levam <code>ETag</code> para que duas sincronizações não se
+          sobrescrevam.
+        </p>
+        <p class="why"><b>Por quê:</b> perder uma vistoria inteira porque o 4G caiu no décimo andar não é aceitável.</p>
+      </div>
+      <div class="decision">
+        <h3>Papéis por empresa, e suporte que deixa rastro</h3>
+        <p>
+          Admin, vistoriador e imobiliária são papéis dentro de uma empresa. O suporte da AI8 pode
+          atuar em qualquer empresa, mas só informando qual e por quê: cada ação entre empresas
+          exige o motivo e fica na auditoria.
+        </p>
+        <p class="why"><b>Por quê:</b> acesso de suporte sem motivo registrado é a forma mais comum de vazamento em SaaS.</p>
+      </div>
+      <div class="decision">
+        <h3>Modelos de checklist como dado, não como código</h3>
+        <p>
+          No sistema antigo, cada tipo de imóvel era um template PHP. Na versão nova, áreas e itens
+          são cadastro da empresa, e o laudo é gerado a partir do que foi preenchido
+          naquele momento.
+        </p>
+      </div>
+      <div class="decision">
+        <h3>Integração com o CV CRM por empresa</h3>
+        <p>
+          Cada construtora conecta o próprio CV, e a vistoria nasce da reserva e da unidade que já
+          estão lá. As credenciais ficam por empresa e as unidades são mapeadas pelo id do CV dentro
+          de cada uma.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>06</span>Por dentro</h2>
+    <div class="gallery">
+      <figure>
+        <img src={url('media/checkhome-checklist.webp')} alt="Checklist de vistoria no tablet com itens aprovados e um reprovado" loading="lazy" width="1600" height="900" />
+        <figcaption>Item por item no tablet, com foto e observação.</figcaption>
+      </figure>
+      <figure>
+        <img src={url('media/checkhome-laudo.webp')} alt="Laudo de vistoria em PDF com papel timbrado" loading="lazy" width="1600" height="900" />
+        <figcaption>O laudo em PDF, com o papel timbrado da construtora.</figcaption>
+      </figure>
+      <figure>
+        <img src={url('media/checkhome-engenharia.webp')} alt="Fila da engenharia com pendência vencida há 6 dias úteis" loading="lazy" width="1600" height="900" />
+        <figcaption>A fila da engenharia, ordenada pelo prazo.</figcaption>
+      </figure>
+      <figure>
+        <img src={url('media/checkhome-indicadores.webp')} alt="Indicadores de prazos, tempo de resposta e produtividade" loading="lazy" width="1600" height="900" />
+        <figcaption>Indicadores de prazo, tempo de resposta e produtividade.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>07</span>Resultado</h2>
+    <div class="prose">
+      <p>
+        Em produção, multi-tenant desde o primeiro dia, com a mesma topologia no
+        <code>docker-compose</code> local e no deploy: web, API e Postgres.
+      </p>
+      <div class="numbers">
+        <div><strong>~320</strong><span>arquivos Java na API</span></div>
+        <div><strong>59</strong><span>migrações de banco</span></div>
+        <div><strong>3 + 1</strong><span>papéis por empresa, mais o suporte auditado</span></div>
+        <div><strong>Offline</strong><span>fila de sincronização com ETag no tablet</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>08</span>Aprendizados</h2>
+    <div class="prose">
+      <p>
+        Reescrever um sistema que funciona é perigoso: o antigo carrega regras que ninguém
+        documentou. O que ajudou foi tratar o sistema PHP como especificação: o catálogo de
+        formulários, áreas e itens virou dado no banco novo antes de qualquer tela, e as regras
+        implícitas viraram teste.
+      </p>
+    </div>
+  </section>
+</CaseStudy>

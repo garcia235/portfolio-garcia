@@ -1,0 +1,137 @@
+---
+import type { Project } from '../data/site';
+import { url } from '../data/site';
+import QaVisual from './QaVisual.astro';
+
+interface Props { project: Project; index: number }
+const { project: p, index } = Astro.props;
+const flip = index % 2 === 1;
+---
+
+<article class:list={['feature', { flip }]} style={`--c:${p.color}`} data-reveal>
+  <a class="media" href={url(`projetos/${p.slug}`)} tabindex="-1" aria-hidden="true" data-preview>
+    {p.poster ? (
+      <>
+        <img src={url(p.poster)} alt="" loading="lazy" decoding="async" width="1600" height="900" />
+        {p.video && (
+          <video muted loop playsinline preload="none" poster={url(p.poster)} data-src={url(p.video)}></video>
+        )}
+        {p.video && <span class="play-hint mono">passe o mouse para ver em movimento</span>}
+      </>
+    ) : (
+      <QaVisual />
+    )}
+  </a>
+
+  <div class="body">
+    <p class="org mono"><span class="num">0{index + 1}</span> {p.org}</p>
+    <h3><a href={url(`projetos/${p.slug}`)}>{p.name}</a></h3>
+    <p class="one">{p.oneLiner}</p>
+    <p class="role"><strong>Meu papel.</strong> {p.role}</p>
+
+    <dl class="proof">
+      {p.proof.map((x) => (
+        <div>
+          <dt>{x.value}</dt>
+          <dd>{x.label}</dd>
+        </div>
+      ))}
+    </dl>
+
+    <ul class="tags">{p.tags.map((t) => <li>{t}</li>)}</ul>
+
+    <div class="links">
+      <a class="btn" href={url(`projetos/${p.slug}`)}>Estudo de caso <span class="arrow" aria-hidden="true">→</span></a>
+      {p.live && <a class="live" href={p.live} target="_blank" rel="noopener">{p.liveLabel ?? 'Produto no ar'} ↗</a>}
+    </div>
+  </div>
+</article>
+
+<style>
+  .feature {
+    display: grid; gap: clamp(24px, 4vw, 56px);
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    align-items: center;
+  }
+  .feature.flip .media { order: 2; }
+  .feature + :global(.feature) { margin-top: clamp(72px, 10vw, 128px); }
+
+  .media {
+    position: relative; display: block; aspect-ratio: 16 / 10; overflow: hidden;
+    border-radius: var(--radius); border: 1px solid var(--line);
+    background: var(--bg-2);
+    box-shadow: 0 30px 80px -40px color-mix(in srgb, var(--c) 55%, transparent);
+    transition: transform .5s var(--ease), box-shadow .5s;
+  }
+  .media::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 30%, transparent);
+  }
+  .feature:hover .media { transform: translateY(-4px); }
+  .media img, .media video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .media video { opacity: 0; transition: opacity .4s; }
+  .media:global(.playing) video { opacity: 1; }
+  .play-hint {
+    position: absolute; left: 12px; bottom: 12px; font-size: 11px;
+    background: color-mix(in srgb, var(--bg) 80%, transparent); color: var(--ink-2);
+    padding: 4px 10px; border-radius: 999px; backdrop-filter: blur(6px);
+    transition: opacity .3s;
+  }
+  .media:global(.playing) .play-hint { opacity: 0; }
+  @media (hover: none) { .play-hint { display: none; } }
+
+  .body { display: grid; gap: 16px; }
+  .org { font-size: 12px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; display: flex; gap: 10px; align-items: center; }
+  .num { color: var(--c); }
+  h3 { font-size: clamp(34px, 4.5vw, 54px); letter-spacing: -0.03em; }
+  h3 a { text-decoration: none; }
+  h3 a:hover { color: var(--c); }
+  .one { font-size: clamp(17px, 1.6vw, 19px); color: var(--ink); }
+  .role { color: var(--ink-2); font-size: 15px; }
+  .role strong { color: var(--ink); }
+
+  .proof {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 4px 0;
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 16px 0;
+  }
+  .proof dt { font-size: clamp(22px, 2.4vw, 28px); font-weight: 700; color: var(--c); letter-spacing: -0.02em; }
+  .proof dd { margin: 2px 0 0; font-size: 13px; color: var(--muted); line-height: 1.35; }
+
+  .links { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-top: 4px; }
+  .live { color: var(--ink-2); font-size: 15px; text-decoration: none; }
+  .live:hover { color: var(--c); }
+
+  @media (max-width: 860px) {
+    .feature { grid-template-columns: 1fr; }
+    .feature.flip .media { order: 0; }
+  }
+  @media (max-width: 480px) {
+    .proof { grid-template-columns: 1fr; gap: 10px; }
+    .proof div { display: flex; align-items: baseline; gap: 10px; }
+  }
+</style>
+
+<script>
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const canHover = matchMedia('(hover: hover)').matches;
+
+  document.querySelectorAll<HTMLElement>('[data-preview]').forEach((media) => {
+    const video = media.querySelector('video');
+    if (!video || reduce) return;
+    const card = media.closest('.feature') as HTMLElement;
+
+    const play = () => {
+      if (!video.src) video.src = video.dataset.src!;
+      video.play().then(() => media.classList.add('playing')).catch(() => {});
+    };
+    const stop = () => { video.pause(); media.classList.remove('playing'); };
+
+    if (canHover) {
+      card.addEventListener('mouseenter', play);
+      card.addEventListener('mouseleave', stop);
+    } else {
+      // no toque, toca quando o card ocupa boa parte da tela
+      new IntersectionObserver(([e]) => (e.isIntersecting ? play() : stop()), { threshold: 0.6 }).observe(media);
+    }
+  });
+</script>

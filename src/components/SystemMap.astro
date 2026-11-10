@@ -1,0 +1,275 @@
+---
+import { url } from '../data/site';
+
+type Node = { id: string; name: string; sub: string; text: string; href?: string; color?: string };
+
+const systems: Node[] = [
+  { id: 'cv', name: 'CV CRM', sub: 'CRM imobiliário', text: 'O CRM que as incorporadoras já usam. O visuAI lê a base inteira dele, sem escrever nada de volta; o Check Home puxa as reservas; e a integração com o ERP sincroniza corretores e clientes.' },
+  { id: 'erp', name: 'Informakon', sub: 'ERP', text: 'ERP onde o contrato é digitado. Não avisa quando algo muda, então unidades e vendas voltam para o CV por reconciliação de snapshot, em dry-run ou apply.' },
+  { id: 'brevo', name: 'Brevo', sub: 'e-mail transacional', text: 'Convites, redefinição de senha e avisos do Check Home saem por e-mail transacional.' },
+  { id: 'ra', name: 'Reclame Aqui', sub: 'API HugMe', text: 'API com orçamento de cerca de 10 requisições por minuto. Polling a cada 5 minutos, anexos e respostas competem pelo mesmo orçamento.' },
+  { id: 'sf', name: 'Salesforce', sub: 'Service · Sales Cloud', text: 'A plataforma onde mora o atendimento do QuintoAndar. Apex assíncrono, LWC e Named Credentials.' },
+  { id: 'wa', name: 'WhatsApp', sub: 'Meta Cloud API', text: 'Canal oficial de cobrança do UseQuittar, com webhook por empresa, templates validados e reconciliação de status.' },
+];
+
+const built: Node[] = [
+  { id: 'visuai', name: 'visuAI', sub: 'AI8', color: 'var(--visuai)', href: url('projetos/visuai'), text: 'Lê o CV CRM e monta o percurso comercial do lead ao repasse, com cada número rastreável até a consulta que o produziu.' },
+  { id: 'cvinf', name: 'CV × Informakon', sub: 'AI8', text: 'API multi-tenant em FastAPI. Cada dado tem uma fonte só: o CV para corretores e clientes, o ERP para unidades e vendas.' },
+  { id: 'checkhome', name: 'Check Home', sub: 'AI8', color: 'var(--checkhome)', href: url('projetos/checkhome'), text: 'Vistoria de entrega no tablet, que funciona sem internet e sincroniza depois. Item reprovado vira pendência da engenharia com prazo.' },
+  { id: 'qara', name: 'Integração Reclame Aqui', sub: 'QuintoAndar', color: 'var(--qa)', href: url('projetos/quintoandar'), text: 'Cases, timeline, anexos e respostas dos analistas, tudo pelo Salesforce, com um coordenador que divide o orçamento de requisições.' },
+  { id: 'qamerge', name: 'Account Merge', sub: 'QuintoAndar', color: 'var(--qa)', href: url('projetos/quintoandar#merge'), text: 'Consolidação de milhões de Person Accounts duplicadas em etapas, com retry, revisão manual e idempotência.' },
+  { id: 'quittar', name: 'UseQuittar', sub: 'AI8', text: 'Recuperação de crédito multi-tenant, com o contato com o devedor automatizado pelo WhatsApp oficial.' },
+];
+
+const edges: [string, string][] = [
+  ['cv', 'visuai'],
+  ['cv', 'cvinf'],
+  ['erp', 'cvinf'],
+  ['cv', 'checkhome'],
+  ['brevo', 'checkhome'],
+  ['ra', 'qara'],
+  ['sf', 'qara'],
+  ['sf', 'qamerge'],
+  ['wa', 'quittar'],
+];
+
+const all = [...systems, ...built];
+---
+
+<div class="map" data-map data-edges={JSON.stringify(edges)}>
+  <div class="map-head">
+    <span class="map-label">Sistemas de terceiros</span>
+    <span class="map-label right">O que eu construí</span>
+  </div>
+
+  <div class="map-grid">
+    <ul class="col" aria-label="Sistemas de terceiros">
+      {systems.map((n) => (
+        <li>
+          <button type="button" class="node ext" data-node={n.id} aria-describedby="map-caption">
+            <span class="node-name">{n.name}</span>
+            <span class="node-sub">{n.sub}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+
+    <div class="lane" aria-hidden="true"></div>
+
+    <ul class="col" aria-label="Sistemas que construí">
+      {built.map((n) => (
+        <li>
+          <button type="button" class="node own" data-node={n.id} style={n.color ? `--c:${n.color}` : undefined} aria-describedby="map-caption">
+            <span class="dot" aria-hidden="true"></span>
+            <span class="node-name">{n.name}</span>
+            <span class="node-sub">{n.sub}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+
+    <svg class="wires" aria-hidden="true"></svg>
+  </div>
+
+  <div class="caption" id="map-caption" aria-live="polite">
+    <p class="caption-empty">Passe o mouse ou toque num sistema para ver o que passa por ele.</p>
+    {all.map((n) => (
+      <div class="caption-item" data-caption={n.id} hidden>
+        <strong>{n.name}</strong>
+        <span class="caption-sub">{n.sub}</span>
+        <p>{n.text}</p>
+        {n.href && <a href={n.href}>Ver o estudo de caso <span aria-hidden="true">→</span></a>}
+      </div>
+    ))}
+  </div>
+</div>
+
+<script>
+  const SVGNS = 'http://www.w3.org/2000/svg';
+
+  function setup(root: HTMLElement) {
+    const edges: [string, string][] = JSON.parse(root.dataset.edges ?? '[]');
+    const grid = root.querySelector<HTMLElement>('.map-grid')!;
+    const svg = root.querySelector<SVGSVGElement>('.wires')!;
+    const nodes = new Map<string, HTMLElement>();
+    root.querySelectorAll<HTMLElement>('[data-node]').forEach((el) => nodes.set(el.dataset.node!, el));
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    type Wire = { a: string; b: string; path: SVGPathElement; dots: SVGCircleElement[]; len: number };
+    let wires: Wire[] = [];
+    let active: string | null = null;
+    let pinned: string | null = null;
+
+    function draw() {
+      svg.replaceChildren();
+      const box = grid.getBoundingClientRect();
+      svg.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
+      wires = edges.map(([a, b]) => {
+        const ra = nodes.get(a)!.getBoundingClientRect();
+        const rb = nodes.get(b)!.getBoundingClientRect();
+        const x1 = ra.right - box.left;
+        const y1 = ra.top + ra.height / 2 - box.top;
+        const x2 = rb.left - box.left;
+        const y2 = rb.top + rb.height / 2 - box.top;
+        const mx = (x1 + x2) / 2;
+        const path = document.createElementNS(SVGNS, 'path');
+        path.setAttribute('d', `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`);
+        path.setAttribute('class', 'wire');
+        path.dataset.a = a;
+        path.dataset.b = b;
+        svg.appendChild(path);
+        const dots = [0, 1].map(() => {
+          const c = document.createElementNS(SVGNS, 'circle');
+          c.setAttribute('r', '2.6');
+          c.setAttribute('class', 'packet');
+          svg.appendChild(c);
+          return c;
+        });
+        return { a, b, path, dots, len: path.getTotalLength() };
+      });
+      paint();
+      wires.forEach(placeStatic);
+    }
+
+    function placeStatic(w: Wire) {
+      w.dots.forEach((d, i) => {
+        const p = w.path.getPointAtLength(w.len * (0.33 + i * 0.33));
+        d.setAttribute('cx', String(p.x));
+        d.setAttribute('cy', String(p.y));
+      });
+    }
+
+    function related(id: string) {
+      const set = new Set([id]);
+      edges.forEach(([a, b]) => {
+        if (a === id) set.add(b);
+        if (b === id) set.add(a);
+      });
+      return set;
+    }
+
+    function paint() {
+      const id = pinned ?? active;
+      const rel = id ? related(id) : null;
+      root.classList.toggle('focused', Boolean(id));
+      nodes.forEach((el, key) => {
+        el.classList.toggle('on', Boolean(rel?.has(key)));
+        el.setAttribute('aria-pressed', String(pinned === key));
+      });
+      wires.forEach((w) => {
+        const on = Boolean(id && (w.a === id || w.b === id));
+        w.path.classList.toggle('on', on);
+        w.dots.forEach((d) => d.classList.toggle('on', on));
+      });
+      root.querySelector<HTMLElement>('.caption-empty')!.hidden = Boolean(id);
+      root.querySelectorAll<HTMLElement>('[data-caption]').forEach((c) => {
+        c.hidden = c.dataset.caption !== id;
+      });
+    }
+
+    nodes.forEach((el, key) => {
+      el.addEventListener('mouseenter', () => { active = key; paint(); });
+      el.addEventListener('mouseleave', () => { active = null; paint(); });
+      el.addEventListener('focus', () => { active = key; paint(); });
+      el.addEventListener('blur', () => { active = null; paint(); });
+      el.addEventListener('click', () => { pinned = pinned === key ? null : key; paint(); });
+    });
+
+    let t0 = performance.now();
+    function tick(t: number) {
+      const dt = (t - t0) / 1000;
+      wires.forEach((w, i) => {
+        const speed = w.path.classList.contains('on') ? 0.42 : 0.16;
+        w.dots.forEach((d, j) => {
+          const f = (dt * speed + i * 0.137 + j * 0.5) % 1;
+          // ida nos ímpares, volta nos pares: integração é conversa, não monólogo
+          const pos = j % 2 === 0 ? f : 1 - f;
+          const p = w.path.getPointAtLength(w.len * pos);
+          d.setAttribute('cx', String(p.x));
+          d.setAttribute('cy', String(p.y));
+        });
+      });
+      raf = requestAnimationFrame(tick);
+    }
+
+    let raf = 0;
+    const ro = new ResizeObserver(() => draw());
+    ro.observe(grid);
+    draw();
+
+    if (!reduce) {
+      const vis = new IntersectionObserver(([e]) => {
+        cancelAnimationFrame(raf);
+        if (e.isIntersecting) { t0 = performance.now() - 2000; raf = requestAnimationFrame(tick); }
+      });
+      vis.observe(root);
+    }
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-map]').forEach(setup);
+</script>
+
+<style>
+  .map { position: relative; }
+  .map-head { display: flex; justify-content: space-between; margin-bottom: 14px; }
+  .map-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+
+  .map-grid {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(28px, .9fr) minmax(0, 1fr);
+  }
+  .col { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; position: relative; z-index: 2; }
+
+  .node {
+    width: 100%; text-align: left; font: inherit; color: var(--ink);
+    display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center;
+    padding: 10px 14px; border-radius: 10px; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--line);
+    transition: border-color .25s, opacity .25s, transform .25s var(--ease), background .25s;
+  }
+  .node.ext { grid-template-columns: 1fr; }
+  .node-name { font-weight: 600; font-size: 15px; line-height: 1.25; grid-column: -2; }
+  .node-sub { font-family: var(--font-mono); font-size: 11px; color: var(--muted); grid-column: -2; }
+  .dot {
+    grid-row: span 2; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--c, var(--accent));
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--c, var(--accent)) 18%, transparent);
+  }
+  .node.own { border-color: color-mix(in srgb, var(--c, var(--line)) 35%, var(--line)); }
+
+  :global(.map.focused .node:not(.on)) { opacity: .35; }
+  .node:global(.on) { border-color: var(--c, var(--accent)); background: color-mix(in srgb, var(--c, var(--accent)) 8%, var(--surface)); }
+  .node[aria-pressed='true'] { transform: translateX(var(--nudge, 0)); }
+  .ext[aria-pressed='true'] { --nudge: 4px; }
+  .own[aria-pressed='true'] { --nudge: -4px; }
+
+  .wires { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; overflow: visible; pointer-events: none; }
+  .wires :global(.wire) { fill: none; stroke: var(--line-2); stroke-width: 1.2; transition: stroke .25s, opacity .25s; }
+  .wires :global(.packet) { fill: var(--muted); opacity: .55; transition: fill .25s, opacity .25s; }
+  .wires :global(.wire.on) { stroke: var(--accent); stroke-width: 1.6; }
+  .wires :global(.packet.on) { fill: var(--accent); opacity: 1; }
+  .map:global(.focused) .wires :global(.wire:not(.on)) { opacity: .25; }
+  .map:global(.focused) .wires :global(.packet:not(.on)) { opacity: 0; }
+
+  .caption {
+    margin-top: 18px; min-height: 148px;
+    border: 1px dashed var(--line-2); border-radius: 12px; padding: 14px 16px;
+    font-size: 15px; color: var(--ink-2);
+  }
+  .caption-empty { color: var(--muted); }
+  .caption-item { display: grid; gap: 4px; }
+  .caption-item[hidden] { display: none; }
+  .caption-item strong { color: var(--ink); font-size: 16px; }
+  .caption-sub { font-family: var(--font-mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .caption-item a { color: var(--accent); font-weight: 600; text-decoration: none; margin-top: 4px; width: fit-content; }
+  .caption-item a:hover { text-decoration: underline; }
+
+  @media (max-width: 560px) {
+    .node { padding: 8px 10px; }
+    .node-name { font-size: 13px; }
+    .node-sub { font-size: 10px; }
+    .dot { display: none; }
+    .node.own { grid-template-columns: 1fr; }
+  }
+</style>

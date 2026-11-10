@@ -1,0 +1,217 @@
+---
+import CaseStudy from '../../layouts/CaseStudy.astro';
+import QaVisual from '../../components/QaVisual.astro';
+import RateLimitSim from '../../components/RateLimitSim.astro';
+
+const states = [
+  { id: 'Pending', x: 20, y: 70, label: 'Pendente' },
+  { id: 'InProgress', x: 190, y: 70, label: 'Em processamento' },
+  { id: 'Succeeded', x: 400, y: 10, label: 'Concluído' },
+  { id: 'RetryableError', x: 400, y: 70, label: 'Erro com retry' },
+  { id: 'ManualReview', x: 400, y: 130, label: 'Revisão manual' },
+  { id: 'Ignored', x: 190, y: 150, label: 'Ignorado' },
+  { id: 'Failed', x: 560, y: 70, label: 'Falhou' },
+];
+---
+
+<CaseStudy
+  slug="quintoandar"
+  title="QuintoAndar — estudo de caso · Arthur Garcia"
+  description="Integração Salesforce × Reclame Aqui (HugMe) com orçamento de requisições coordenado, e consolidação assíncrona de milhões de Person Accounts duplicadas, na plataforma Salesforce do QuintoAndar."
+  period="2025 — hoje, pela Taak"
+  team="Time de plataforma Salesforce do QuintoAndar, pela Taak"
+>
+  <div slot="media" class="qa-media">
+    <QaVisual />
+  </div>
+
+  <section class="block">
+    <h2><span>01</span>Visão geral</h2>
+    <div class="prose">
+      <p class="lead">
+        No atendimento do QuintoAndar, uma reclamação no Reclame Aqui é pública e tem relógio
+        correndo. Os analistas precisavam responder de dentro do Salesforce, sem trocar de tela.
+      </p>
+      <p>
+        Pela Taak, desenhei e implementei a integração completa entre o Service Cloud e a API HugMe
+        do Reclame Aqui: tickets viram Cases, a conversa vira timeline, anexos chegam sozinhos e o
+        analista responde, em público ou em privado, pelo próprio Case. No mesmo time, construí o
+        pipeline que consolida milhões de Person Accounts duplicadas.
+      </p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>02</span>O desafio</h2>
+    <div class="prose">
+      <p>
+        Integrar duas plataformas com limites diferentes, e as duas sem perdão:
+      </p>
+      <ul>
+        <li>A API aceita cerca de <strong>10 requisições por minuto</strong>, e polling, anexos e respostas disputam a mesma cota.</li>
+        <li>O Salesforce tem limites por transação: callouts, tempo de CPU, DML. Nada pode ser uma execução longa.</li>
+        <li>A API não avisa o que mudou: é preciso varrer, sem perder ticket e sem duplicar.</li>
+        <li>É produção de alta escala: o que falhar precisa ser visível, retomável e explicável no dia seguinte.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>03</span>Meu papel</h2>
+    <div class="prose">
+      <p>
+        Arquitetura e implementação das duas frentes: o processamento assíncrono, os jobs
+        agendados, o controle de rate limit, o componente de timeline em LWC para o analista, o
+        monitoramento e os procedimentos de troubleshooting para a sustentação em produção.
+      </p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>04</span>O orçamento</h2>
+    <div class="prose">
+      <h3>Um minuto de integração, duas estratégias.</h3>
+      <p>
+        Sem coordenação, cada job chama a API quando está pronto e tenta de novo quando toma 429. O
+        resultado é uma rajada de erros, e a resposta do analista, que é o que importa, disputa a
+        vez com os anexos. Compare.
+      </p>
+      <RateLimitSim />
+      <p class="note">Modelo simplificado para ilustrar a decisão, não o código de produção.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>05</span>Decisões-chave</h2>
+    <div class="decisions">
+      <div class="decision">
+        <h3>Polling com watermark, janela de sobreposição e lease</h3>
+        <p>
+          A varredura roda a cada 5 minutos como uma máquina de estados em Queueable, encadeando a
+          paginação. Guarda até onde já leu (watermark), relê uma janela de segurança para não
+          perder nada no limite e trabalha sob um lease com prazo: se uma execução morrer no meio,
+          a próxima retoma em vez de travar.
+        </p>
+        <p class="why"><b>Por quê:</b> o Salesforce não deixa uma execução durar; a integração tem que ser feita de passos curtos que sabem continuar.</p>
+      </div>
+      <div class="decision">
+        <h3>Um coordenador de orçamento, não retry cego</h3>
+        <p>
+          Antes da chamada, o job pede cota. O coordenador prioriza a resposta do analista, limita
+          quantos anexos entram por rodada e lê os headers de rate limit da própria API para
+          calibrar o backoff. Quem não tem cota é reagendado, sem 429.
+        </p>
+      </div>
+      <div class="decision">
+        <h3>Enfileirar anexo não é processar anexo</h3>
+        <p>
+          O polling só registra que existe um anexo. O download vira um job próprio, assíncrono e
+          rastreável, que busca o arquivo na CDN e o anexa ao Case. Uma varredura nunca fica refém de
+          um arquivo grande.
+        </p>
+      </div>
+      <div class="decision">
+        <h3>Reaproveitar a fila de integração que já existia</h3>
+        <p>
+          Em vez de criar mais um mecanismo, os jobs do Reclame Aqui entraram na fila de jobs de
+          integração da plataforma, que já tinha rastreio, retry e observabilidade. A sustentação
+          olha um lugar só.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="merge">
+    <h2><span>06</span>Account Merge</h2>
+    <div class="prose">
+      <h3>Milhões de contas duplicadas, sem merge duplicado.</h3>
+      <p>
+        A base tinha milhões de Person Accounts duplicadas. A consolidação usa o merge nativo do
+        Salesforce, que tem limites apertados por transação, então ela virou um pipeline: eventos
+        geram <strong>requisições de merge</strong>, um batch coleta, outro processa em etapas, e
+        cada requisição percorre uma máquina de estados explícita.
+      </p>
+
+      <figure class="fsm">
+        <svg viewBox="0 0 700 190" role="img" aria-labelledby="fsm-t">
+          <title id="fsm-t">Estados de uma requisição de merge: pendente, em processamento, e daí concluído, erro com retry, revisão manual, ignorado ou falhou</title>
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" class="arrow" />
+            </marker>
+          </defs>
+          <path d="M140 88 H186" class="edge" marker-end="url(#arr)" />
+          <path d="M330 80 C360 80, 370 28, 396 28" class="edge" marker-end="url(#arr)" />
+          <path d="M330 88 H396" class="edge" marker-end="url(#arr)" />
+          <path d="M330 96 C360 96, 370 148, 396 148" class="edge" marker-end="url(#arr)" />
+          <path d="M260 106 V146" class="edge" marker-end="url(#arr)" />
+          <path d="M520 88 H556" class="edge" marker-end="url(#arr)" />
+          <path d="M460 70 C460 40, 290 40, 268 66" class="edge retry" marker-end="url(#arr)" />
+          <text x="370" y="46" class="et">nova tentativa</text>
+          <text x="524" y="80" class="et">esgotou</text>
+          {states.map((s) => (
+            <g class:list={['st', s.id]}>
+              <rect x={s.x} y={s.y} width={s.id === 'InProgress' ? 140 : 120} height="36" rx="9" />
+              <text x={s.x + (s.id === 'InProgress' ? 70 : 60)} y={s.y + 22} text-anchor="middle">{s.label}</text>
+            </g>
+          ))}
+        </svg>
+      </figure>
+
+      <ul>
+        <li><strong>Idempotência pelo evento de origem:</strong> a mesma requisição processada duas vezes não faz dois merges.</li>
+        <li><strong>Vencedor e perdedor resolvidos por identidade</strong>, não por nome: cada lado guarda os identificadores que justificaram a decisão.</li>
+        <li><strong>Erro classificado:</strong> o que é transitório volta para a fila com contador de tentativas; o que é ambíguo vai para revisão manual, com código e mensagem do último erro.</li>
+        <li><strong>Rastro completo:</strong> início, fim, job que processou e o payload original ficam na própria requisição.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>07</span>Resultado</h2>
+    <div class="prose">
+      <div class="numbers">
+        <div><strong>~10/min</strong><span>orçamento da API respeitado por desenho</span></div>
+        <div><strong>5 min</strong><span>ciclo de polling, retomável</span></div>
+        <div><strong>7</strong><span>estados explícitos por requisição de merge</span></div>
+        <div><strong>milhões</strong><span>de Person Accounts no escopo da consolidação</span></div>
+      </div>
+      <p>
+        Os analistas passaram a operar o Reclame Aqui de dentro do Case, e a sustentação ganhou
+        monitoramento e roteiros de troubleshooting para cada etapa.
+      </p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span>08</span>Aprendizados</h2>
+    <div class="prose">
+      <p>
+        Em integração de alta escala, a pergunta certa não é "como faço a chamada?", é "o que
+        acontece quando ela falha às três da manhã?". Estado explícito, idempotência e um lugar só
+        para olhar os jobs valem mais do que qualquer otimização.
+      </p>
+    </div>
+  </section>
+</CaseStudy>
+
+<style>
+  .qa-media { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); aspect-ratio: 16 / 7; }
+  .qa-media :global(figure) { height: 100%; }
+  @media (max-width: 640px) { .qa-media { aspect-ratio: 4 / 3; } }
+
+  .note { font-size: 13px !important; color: var(--muted); }
+
+  .fsm { margin: 8px 0; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg-2); overflow-x: auto; }
+  .fsm svg { min-width: 560px; width: 100%; height: auto; }
+  .fsm .st rect { fill: var(--surface); stroke: var(--line-2); }
+  .fsm .st text { font: 600 12px var(--font-sans); fill: var(--ink); }
+  .fsm .Succeeded rect { stroke: var(--ok); }
+  .fsm .RetryableError rect { stroke: var(--warn); }
+  .fsm .ManualReview rect { stroke: var(--c); }
+  .fsm .Failed rect { stroke: var(--bad); }
+  .fsm .edge { fill: none; stroke: var(--line-2); stroke-width: 1.4; }
+  .fsm .edge.retry { stroke: var(--warn); stroke-dasharray: 4 4; }
+  .fsm .arrow { fill: var(--muted); }
+  .fsm .et { font: 400 10px var(--font-mono); fill: var(--muted); }
+</style>

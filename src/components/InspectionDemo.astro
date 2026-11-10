@@ -1,0 +1,160 @@
+---
+// Demonstração do fluxo do Check Home: item reprovado vira pendência com prazo em dias úteis,
+// e a revistoria fica bloqueada até tudo ser corrigido. Dados fictícios.
+const items = [
+  { id: 'piso', name: 'Piso cerâmico', area: 'Cozinha' },
+  { id: 'revest', name: 'Revestimento de parede', area: 'Cozinha' },
+  { id: 'bancada', name: 'Bancada e cuba', area: 'Cozinha', hint: 'Trinca na bancada de granito junto à cuba.' },
+  { id: 'tomadas', name: 'Tomadas', area: 'Sala' },
+];
+const SLA = 10;
+---
+
+<div class="insp" data-insp data-sla={SLA}>
+  <div class="tablet">
+    <div class="t-head">
+      <span class="mono">Vistoria de entrega · Torre A — 303</span>
+      <span class="mono t-count" data-count>0 de {items.length}</span>
+    </div>
+    <ul class="checklist">
+      {items.map((it) => (
+        <li data-item={it.id} data-name={it.name} data-hint={it.hint ?? 'Item fora do padrão de entrega.'}>
+          <div class="ci-name">
+            <strong>{it.name}</strong>
+            <span class="mono">{it.area}</span>
+          </div>
+          <div class="ci-actions" role="group" aria-label={`Resultado de ${it.name}`}>
+            <button type="button" class="ok" data-set="ok" aria-pressed="false">Aprovar</button>
+            <button type="button" class="bad" data-set="bad" aria-pressed="false">Reprovar</button>
+          </div>
+        </li>
+      ))}
+    </ul>
+  </div>
+
+  <div class="eng">
+    <div class="e-head">
+      <strong>Fila da engenharia</strong>
+      <span class="badge mono" data-revist>Revistoria liberada</span>
+    </div>
+    <p class="e-empty" data-empty>Nenhuma pendência. Reprove um item no tablet para ver o que acontece.</p>
+    <ul class="pend" data-pend aria-live="polite"></ul>
+    <p class="e-foot mono">Prazo de {SLA} dias úteis a partir de hoje, sem contar fim de semana.</p>
+  </div>
+</div>
+
+<script>
+  function addBusinessDays(from: Date, n: number) {
+    const d = new Date(from);
+    let added = 0;
+    while (added < n) {
+      d.setDate(d.getDate() + 1);
+      const wd = d.getDay();
+      if (wd !== 0 && wd !== 6) added++;
+    }
+    return d;
+  }
+  const fmt = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' });
+
+  document.querySelectorAll<HTMLElement>('[data-insp]').forEach((root) => {
+    const sla = Number(root.dataset.sla ?? 10);
+    const state = new Map<string, 'ok' | 'bad' | 'fixed'>();
+    const pend = root.querySelector<HTMLElement>('[data-pend]')!;
+    const empty = root.querySelector<HTMLElement>('[data-empty]')!;
+    const revist = root.querySelector<HTMLElement>('[data-revist]')!;
+    const count = root.querySelector<HTMLElement>('[data-count]')!;
+    const rows = Array.from(root.querySelectorAll<HTMLElement>('[data-item]'));
+
+    function render() {
+      rows.forEach((row) => {
+        const s = state.get(row.dataset.item!);
+        row.dataset.state = s ?? '';
+        row.querySelectorAll<HTMLButtonElement>('[data-set]').forEach((b) => {
+          const on = (b.dataset.set === 'ok' && (s === 'ok' || s === 'fixed')) || (b.dataset.set === 'bad' && s === 'bad');
+          b.setAttribute('aria-pressed', String(on));
+        });
+      });
+      count.textContent = `${state.size} de ${rows.length}`;
+
+      const open = rows.filter((r) => state.get(r.dataset.item!) === 'bad');
+      pend.replaceChildren(
+        ...open.map((r) => {
+          const li = document.createElement('li');
+          const due = addBusinessDays(new Date(), sla);
+          li.innerHTML = `
+            <div>
+              <strong></strong>
+              <p></p>
+              <span class="mono due">prazo até ${fmt.format(due)} · ${sla} dias úteis</span>
+            </div>
+            <button type="button" class="fix">Marcar como corrigido</button>`;
+          li.querySelector('strong')!.textContent = r.dataset.name!;
+          li.querySelector('p')!.textContent = r.dataset.hint!;
+          li.querySelector('button')!.addEventListener('click', () => {
+            state.set(r.dataset.item!, 'fixed');
+            render();
+          });
+          return li;
+        }),
+      );
+      empty.hidden = open.length > 0;
+      revist.textContent = open.length ? `Revistoria bloqueada · ${open.length}` : 'Revistoria liberada';
+      revist.classList.toggle('locked', open.length > 0);
+    }
+
+    rows.forEach((row) => {
+      row.querySelectorAll<HTMLButtonElement>('[data-set]').forEach((b) => {
+        b.addEventListener('click', () => {
+          state.set(row.dataset.item!, b.dataset.set as 'ok' | 'bad');
+          render();
+        });
+      });
+    });
+    render();
+  });
+</script>
+
+<style>
+  .insp { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 8px; font-size: 15px; }
+  .tablet, .eng { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 16px; display: grid; gap: 12px; align-content: start; }
+  .tablet { border-radius: 22px; box-shadow: inset 0 0 0 6px var(--bg-2); padding: 20px; }
+  .t-head, .e-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .t-head .mono { font-size: 11px; color: var(--muted); }
+  .t-count { color: var(--c) !important; }
+  .checklist, .pend { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .checklist li {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-2);
+    transition: background .2s, border-color .2s;
+  }
+  .checklist li[data-state='bad'] { border-color: color-mix(in srgb, var(--bad) 60%, var(--line)); background: color-mix(in srgb, var(--bad) 8%, var(--bg-2)); }
+  .checklist li[data-state='ok'], .checklist li[data-state='fixed'] { border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
+  .ci-name { display: grid; }
+  .ci-name strong { font-size: 14px; color: var(--ink); }
+  .ci-name .mono { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .ci-actions { display: flex; gap: 6px; }
+  .ci-actions button, .pend :global(.fix) {
+    font: 600 12px var(--font-sans); padding: 6px 10px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2);
+  }
+  .ci-actions .ok[aria-pressed='true'] { background: var(--ok); border-color: var(--ok); color: #0c0d0f; }
+  .ci-actions .bad[aria-pressed='true'] { background: var(--bad); border-color: var(--bad); color: #fff; }
+
+  .e-head strong { color: var(--ink); }
+  .badge { font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--ok) 50%, var(--line)); color: var(--ok); }
+  .badge:global(.locked) { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); color: var(--warn); }
+  .e-empty { color: var(--muted); font-size: 14px !important; }
+  .pend :global(li) {
+    display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap;
+    padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-2);
+    animation: pop .35s var(--ease);
+  }
+  .pend :global(strong) { color: var(--ink); font-size: 14px; }
+  .pend :global(p) { font-size: 13px !important; color: var(--ink-2); }
+  .pend :global(.due) { font-size: 11px; color: var(--warn); }
+  .pend :global(.fix) { border-color: var(--c); color: var(--ink); }
+  .e-foot { font-size: 11px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 10px; }
+  @keyframes pop { from { opacity: 0; transform: translateX(-8px); } }
+  @media (max-width: 760px) { .insp { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) { .pend :global(li) { animation: none; } }
+</style>
